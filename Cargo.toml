@@ -1,0 +1,12 @@
+[package]
+name = "subxt_poc"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+subxt = "0.37.0"
+subxt-signer = "0.37.0"
+tokio = { version = "1.35", features = ["macros", "time", "rt-multi-thread"] }
+hex = "0.4.3"
