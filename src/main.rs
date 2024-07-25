@@ -1,66 +1,77 @@
 #![allow(missing_docs)]
-use subxt::{ OnlineClient, PolkadotConfig
+use subxt::{
+    PolkadotConfig,
+    utils::{AccountId32, MultiAddress},
+    OnlineClient,
 };
-use subxt_signer::sr25519::dev::{self};
-use subxt::backend::{legacy::LegacyRpcMethods, rpc::{RpcClient, rpc_params}};
+use subxt::backend::rpc::{RpcClient, rpc_params};
+use anyhow::{Result, Context, anyhow};
+use log::{info, error};
+use serde_json;
+use sp_core::crypto::Ss58Codec;
+use codec::Encode;
 
-
-
-//metadata for the substrate Template node
+// Metadata for the substrate Template node
 #[subxt::subxt(runtime_metadata_path = "metadata.scale")]
 pub mod statemint {}
 
 // PolkadotConfig or SubstrateConfig will suffice for this example at the moment,
 // but PolkadotConfig is a little more correct, having the right `Address` type.
 type StatemintConfig = PolkadotConfig;
+use subxt_signer::sr25519::dev::{self};
+
 
 #[tokio::main]
-pub async fn main() {
+async fn main() {
+    env_logger::init();
     if let Err(err) = run().await {
-        eprintln!("{err}");
+        error!("{:?}", err);
     }
 }
 
-async fn run() -> Result<(), Box<dyn std::error::Error>> {
+async fn run() -> Result<()> {
 
-    // Sending Message using Transaction 
-    let api = OnlineClient::<StatemintConfig>::from_url("ws://127.0.0.1:9944").await?;
+    let _api = OnlineClient::<StatemintConfig>::from_url("ws://127.0.0.1:9944").await?;
     println!("Connection with parachain established.");
 
-    // let alice: MultiAddress<AccountId32, ()> = dev::alice().public_key().into();
-    let alice_pair_signer = dev::alice();
+    let alice: MultiAddress<AccountId32, ()> = dev::alice().public_key().into();
+    println!("Alice: {:?}", alice);
 
-    let remark_message = "Hello World".as_bytes();
-    println!("{:?}", remark_message);
+    let account_id: AccountId32 = match alice {
+        MultiAddress::Id(id) => id,
+        _ => panic!("Expected MultiAddress::Id variant"),
+    };
 
-    let remark_extrinsic = statemint::tx().system().remark_with_event(remark_message.to_vec());
+    // Convert AccountId32 to SS58 address
+    let encoded: Vec<u8> = account_id.encode();
+    let array: [u8; 32] = encoded.try_into().expect("AccountId32 should be 32 bytes");
+    let ss58_address = Ss58Codec::to_ss58check(&sp_core::crypto::AccountId32::new(array));
+    println!("SS58 Address: {}", ss58_address);
 
-    // Submit the extrinsic
-    let _result = api.
-        tx()
-        .sign_and_submit_then_watch_default(&remark_extrinsic, &alice_pair_signer)
+
+    let text = "Hello World!";
+    
+    let statement: String = text.to_string();
+    info!("Statement: {:?}", statement);
+
+    // Create RPC client
+    let rpc_client = RpcClient::from_url("ws://127.0.0.1:9944")
         .await
-        .map(|e| {
-            println!("Collection creation submitted, waiting for transaction to be finalized...");
-            e
-        })?
-        .wait_for_finalized_success()
-        .await?;
+        .context("Failed to create RPC client")?;
 
-        
-    // Sending Message using RPC
-    let rpc_client = RpcClient::from_url("ws://127.0.0.1:9944").await?;    
+    // Call the statement_submit RPC method
+    let result: serde_json::Value = rpc_client
+        .request("statement_submit", rpc_params![statement, None::<subxt::utils::H256>, ss58_address])
+        .await
+        .context("Failed to submit statement via RPC")?;
 
-    // Use this to RPC methods:
-    // let rpc = LegacyRpcMethods::<PolkadotConfig>::new(rpc_client.clone());
+    // Check the result
+    match result {
+        serde_json::Value::String(bytes) => {
+            info!("Statement submitted via RPC successfully. Encoded extrinsic: {}", bytes);
+        },
+        _ => return Err(anyhow!("Unexpected RPC response: {:?}", result)),
+    }
 
-     // Encode the message
-    let encoded_message = hex::encode(remark_message);
-    println!("{:?}", encoded_message);
-
-
-    let result = rpc_client.request("statement_submit", rpc_params![encoded_message]).await?;  
-     
     Ok(())
-
 }
