@@ -10,6 +10,8 @@ use log::{info, error};
 use serde_json;
 use sp_core::crypto::Ss58Codec;
 use codec::Encode;
+use rand::Rng;
+use base64::{encode};
 
 // Metadata for the substrate Template node
 #[subxt::subxt(runtime_metadata_path = "metadata.scale")]
@@ -49,10 +51,17 @@ async fn run() -> Result<()> {
     println!("SS58 Address: {}", ss58_address);
 
 
-    let text = "Hello World!";
+    let text = "Hey substrate";
+
+     // Generate random data as bytes of vector with defined size
+    let mut rng = rand::thread_rng();
+    let random_data: Vec<u8> = (0..32).map(|_| rng.gen()).collect(); // 16 bytes of random data
+    println!("Random Data: {:?}", random_data);
     
     let statement: String = text.to_string();
-    info!("Statement: {:?}", statement);
+    let statement1 = encode(&random_data);
+    println!("Statement1: {:?}", statement1);
+    println!("Statement: {:?}", statement);
 
     // Create RPC client
     let rpc_client = RpcClient::from_url("ws://127.0.0.1:9944")
@@ -61,7 +70,7 @@ async fn run() -> Result<()> {
 
     // Call the statement_submit RPC method
     let result: serde_json::Value = rpc_client
-        .request("statement_submit", rpc_params![statement, None::<subxt::utils::H256>, ss58_address])
+        .request("statement_submit", rpc_params![statement1, None::<subxt::utils::H256>, ss58_address])
         .await
         .context("Failed to submit statement via RPC")?;
 
